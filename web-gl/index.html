@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>WebGL Three.js</title>
+    <style>
+        body {
+            width: 100%;
+            background-color: #ffffff;
+        }
+        .wrapper {
+            width: 500px;
+            height: 400px;
+            margin: auto;
+            background: #eeeeee;
+        }
+    </style>
+</head>
+<body>
+<div id="wrapper" class="wrapper"></div>
+</body>
+<script src="https://cdn.bootcdn.net/ajax/libs/three.js/r128/three.js"></script>
+<script>        // 创建场景
+    const scene = new THREE.Scene();
+
+    // 创建相机
+    const camera = new THREE.PerspectiveCamera(75, 500 / 400, 0.1, 1000);
+
+    // 创建渲染器
+    const renderer = new THREE.WebGLRenderer();
+    renderer.setSize(500, 400);
+    document.getElementById('wrapper').appendChild(renderer.domElement);
+
+    // 创建立方体
+    const geometry = new THREE.BoxGeometry();
+    const material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+    const cube = new THREE.Mesh(geometry, material);
+    scene.add(cube);
+
+    camera.position.z = 5;
+
+    // 动画循环
+    function animate() {
+        requestAnimationFrame(animate);
+
+        cube.rotation.x += 0.01;
+        cube.rotation.y += 0.01;
+
+        renderer.render(scene, camera);
+    }
+
+    animate();
+</script>
+</html>

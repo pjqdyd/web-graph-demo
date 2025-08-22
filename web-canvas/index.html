@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>web canvas</title>
+    <style>
+        body {
+            width: 100%;
+            background-color: #ffffff;
+        }
+        .wrapper {
+            width: 500px;
+            height: 400px;
+            margin: auto;
+            background: #eeeeee;
+        }
+        #container {
+            width: 500px;
+            height: 400px;
+        }
+    </style>
+</head>
+<body>
+    <div class="wrapper">
+        <canvas id="container">
+            <p>Your browser does not support the HTML5 canvas tag.</p>
+        </canvas>
+    </div>
+</body>
+<script type="text/javascript">
+    const canvas = document.getElementById('container');
+    const ctx = canvas.getContext('2d');
+    canvas.width = 500;
+    canvas.height = 400;
+
+    let startTime = null;
+    const rotateRect = (timestamp) => {
+        if (!startTime) {
+            startTime = timestamp;
+        }
+        const duration = (timestamp - startTime) / 1000 ;
+        const angle = duration * (Math.PI / 4);
+        ctx.clearRect(0, 0, 200, 200);
+        ctx.save();
+        ctx.translate(100, 100);
+        ctx.rotate(angle);
+        ctx.fillStyle = '#999999';
+        ctx.fillRect(-50, -50, 100, 100);
+        ctx.restore();
+        requestAnimationFrame((time) => rotateRect(time))
+    }
+    rotateRect(0);
+
+    ctx.fillStyle = '#777777';
+    ctx.arc(280, 280, 50, 0, Math.PI * 2)
+    ctx.stroke();
+    ctx.fill();
+
+</script>
+</html>
