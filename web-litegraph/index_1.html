@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>LiteGraph.js Demo</title>
+    <script src="./plugin/highlight.js"></script>
+    <script src="https://cdn.bootcdn.net/ajax/libs/litegraph.js/0.7.18/build/litegraph.js"></script>
+    <link href="https://cdn.bootcdn.net/ajax/libs/litegraph.js/0.7.18/css/litegraph.css" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+        }
+        #container {
+            display: flex;
+            flex-direction: column;
+            height: 90vh;
+        }
+        #toolbar {
+            background: #f0f0f0;
+            padding: 10px;
+            border-bottom: 1px solid #ccc;
+        }
+        #content {
+            flex: 1;
+            display: flex;
+        }
+        #sidebar {
+            width: 200px;
+            background: #f8f8f8;
+            border-right: 1px solid #ccc;
+            padding: 10px;
+        }
+        #graph-container {
+            flex: 1;
+            position: relative;
+        }
+        .node-item {
+            padding: 5px;
+            margin: 5px 0;
+            background: #e0e0e0;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        .node-item:hover {
+            background: #d0d0d0;
+        }
+    </style>
+</head>
+<body>
+<div id="container">
+    <div id="toolbar">
+        <button onclick="saveGraph()">保存</button>
+        <button onclick="loadGraph()">加载</button>
+        <button onclick="clearGraph()">清除</button>
+        <button onclick="startGraph()">启动图形</button>
+        <button onclick="stopGraph()">停止图形</button>
+        <button onclick="restartGraph()">重启图形</button>
+        <button onclick="runStep()">开始执行</button>
+        <button onclick="forceRunStep()">强制重新执行</button>
+    </div>
+    <div id="content">
+        <div id="sidebar">
+            <h3>节点库</h3>
+            <div class="node-item" onclick="addNode('basic/start')">开始节点</div>
+            <div class="node-item" onclick="addNode('basic/const')">常量节点</div>
+            <div class="node-item" onclick="addNode('basic/math')">数学运算节点</div>
+            <div class="node-item" onclick="addNode('basic/my-watch')">监视器节点</div>
+            <div id="output">执行日志将显示在这里...</div>
+        </div>
+        <div id="graph-container">
+            <canvas id="mycanvas" width="1024" height="620"></canvas>
+        </div>
+    </div>
+</div>
+
+<script src="./json/index_1.js"></script>
+<script>
+    // 初始化
+    const graph = new LGraph();
+    const canvas = new LGraphCanvas("#mycanvas", graph);
+    const outputDiv = document.getElementById("output");
+
+    // 注册自定义节点
+    class StartNode extends LGraphNode {
+        constructor() {
+            super();
+            this.title = "开始节点";
+            this.addOutput("start", LiteGraph.EVENT);
+        }
+        onExecute() {
+            this.triggerSlot(0);
+        }
+    }
+
+    class ConstNode extends LGraphNode {
+        constructor() {
+            super();
+            this.title = "常量";
+            this.addOutput("value", "number");
+            this.properties = { value: 1.0 };
+        }
+        onExecute() {
+            this.setOutputData(0, this.properties.value);
+        }
+    }
+
+    class MathNode extends LGraphNode {
+        constructor() {
+            super();
+            this.title = "数学运算";
+            this.addInput("A", "number");
+            this.addInput("B", "number");
+            this.addOutput("result", "number");
+            this.properties = { operation: "add" };
+        }
+        async onExecute() {
+            const A = this.getInputData(0);
+            const B = this.getInputData(1);
+            if (A == null || B == null) return;
+            let result = 0;
+            await new Promise(resolve => setTimeout(resolve, 1500));
+            switch(this.properties.operation) {
+                case "add": result = A + B; break;
+                case "sub": result = A - B; break;
+                case "mul": result = A * B; break;
+                case "div": result = A / B; break;
+            }
+            this.setOutputData(0, result);
+        }
+    }
+
+    class WatchNode extends LGraphNode {
+        constructor() {
+            super();
+            this.title = "值监视器";
+            this.addInput("value", "");
+            this.value = null;
+        }
+        onExecute() {
+            this.value = this.getInputData(0);
+            console.log("值监视器：", this.value);
+            this.setDirtyCanvas(true, true);
+        }
+        onDrawBackground(ctx) {
+            var displayText = String(this.value);
+            if (displayText.length > 15) {
+                displayText = displayText.substring(0, 15) + "...";
+            }
+            ctx.fillText(displayText, this.size[0] / 2, this.size[1] / 2);
+        }
+    }
+
+    // 注册节点
+    LiteGraph.registerNodeType("basic/start", StartNode);
+    LiteGraph.registerNodeType("basic/const", ConstNode);
+    LiteGraph.registerNodeType("basic/math", MathNode);
+    LiteGraph.registerNodeType("basic/my-watch", WatchNode);
+
+    // 节点管理函数
+    function addNode(type) {
+        const node = LiteGraph.createNode(type);
+        node.pos = [200 + Math.ceil(Math.random() * 50), 200 + Math.ceil(Math.random() * 50)];
+        graph.add(node);
+        if (type === "basic/start") {
+            graph.startNode = node;
+        }
+    }
+
+    function saveGraph() {
+        const data = graph.serialize();
+        localStorage.setItem("my_graph", JSON.stringify(data));
+        outputDiv.innerHTML = "图形已保存";
+    }
+
+    function loadGraph() {
+        const jsonData = localStorage.getItem("my_graph");
+        const data = jsonData ? JSON.parse(jsonData) : JSON.parse(Index_1_JsonData);
+        if (data) {
+            graph.configure(data);
+            graph.startNode = graph._nodes.filter(node => node.title === '开始节点');
+            CustomLiteGraphHighlightPlugin(graph)
+            outputDiv.innerHTML = "图形已加载";
+        } else {
+            outputDiv.innerHTML = "没有找到保存的图形";
+        }
+    }
+
+    function clearGraph() {
+        if (confirm("确定要清除图形吗？")) {
+            graph.clear();
+        }
+    }
+
+    // 控制函数
+    function startGraph() {
+        graph.start();
+        // 更新画布
+        graph.setDirtyCanvas(true, true);
+        outputDiv.innerHTML = "图形已启动";
+    }
+
+    function stopGraph() {
+        graph.stop();
+        outputDiv.innerHTML = "图形已停止";
+    }
+
+    function runStep() {
+        if (graph.startNode && graph.startNode[0]) {
+            graph.startNode[0].onExecute();
+        }
+        graph.setDirtyCanvas(true, true);
+        outputDiv.innerHTML = "执行开始完成";
+    }
+
+    function forceRunStep() {
+        // 强制重新执行所有节点
+        graph.runStep(0.1, false, true);
+        graph.setDirtyCanvas(true, true);
+        outputDiv.innerHTML = "强制重新执行完成";
+    }
+
+    function restartGraph() {
+        graph.stop();
+        graph.start();
+        graph.setDirtyCanvas(true, true);
+        outputDiv.innerHTML = "图形已重启";
+    }
+
+    // 加载图形
+    loadGraph()
+</script>
+</body>
+</html>
