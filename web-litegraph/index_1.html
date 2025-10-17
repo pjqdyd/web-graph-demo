@@ -147,11 +147,15 @@
             this.setDirtyCanvas(true, true);
         }
         onDrawBackground(ctx) {
-            var displayText = String(this.value);
-            if (displayText.length > 15) {
-                displayText = displayText.substring(0, 15) + "...";
-            }
-            ctx.fillText(displayText, this.size[0] / 2, this.size[1] / 2);
+            ctx.fillStyle = "#FFF";
+            ctx.font = "12px Arial";
+
+            // 显示监控的值
+            const displayValue = typeof this.value === 'object'
+                ? JSON.stringify(this.value)
+                : String(this.value);
+
+            ctx.fillText(`value: ${displayValue}`, 10, 30);
         }
     }
 
