@@ -91,6 +91,9 @@
             super();
             this.title = "开始节点";
             this.addOutput("start", LiteGraph.EVENT);
+            // 设为 ON_TRIGGER 模式：拓扑循环 runStep 不会反复执行本节点，
+            // 避免延迟完成回填结果时 start→math 事件连线再次闪烁
+            this.mode = LiteGraph.ON_TRIGGER;
         }
         onExecute() {
             this.triggerSlot(0);
@@ -117,13 +120,22 @@
             this.title = "数学运算";
             this.addInput("A", "number");
             this.addInput("B", "number");
+            this.addInput("onTrigger", LiteGraph.EVENT);
             this.addOutput("result", "number");
+            // 事件输出：延迟计算完成后通过此 slot 传播事件给下游（参照官方 events/delay）
+            this.addOutput("out", LiteGraph.EVENT);
             this.properties = { operation: "add" };
             // 延迟计算状态机：保留 setTimeout 视觉延迟，但不破坏同步拓扑执行
             this._lastInputs = [null, null];
+            // 记录上次运算符，运算符变化也需重新计算
+            this._lastOperation = null;
             this._pendingTimer = null;
             this._computing = false;
             this._cachedResult = null;
+        }
+        // 收到开始节点事件时触发自身计算（标准 ACTION 输入 + onAction 模式）
+        onAction() {
+            this.onExecute();
         }
         onExecute() {
             const inputA = this.getInputData(0);
@@ -135,9 +147,12 @@
                 return;
             }
 
-            // 输入变化（或首次执行）→ 启动延迟计算
-            if (this._lastInputs[0] !== inputA || this._lastInputs[1] !== inputB) {
+            // 输入或运算符变化（或首次执行）→ 启动延迟计算
+            if (this._lastInputs[0] !== inputA
+                || this._lastInputs[1] !== inputB
+                || this._lastOperation !== this.properties.operation) {
                 this._lastInputs = [inputA, inputB];
+                this._lastOperation = this.properties.operation;
                 this._computing = true;
                 setNodeHighlight(this, 'executing');
                 this.setOutputData(0, null);
@@ -148,6 +163,13 @@
                     this._computing = false;
                     this.setOutputData(0, this._cachedResult);
                     setNodeHighlight(this, 'executed');
+                    // 按官方 events/delay 模式：计算完成后通过事件输出传播给下游，
+                    // 让 math→watch 连线产生流动高亮动画
+                    this.triggerSlot(1, this._cachedResult);
+                    // 执行一次拓扑消费下游 deferred action；start 已设为 ON_TRIGGER 不会被反复执行
+                    if (this.graph) {
+                        this.graph.runStep(1, false);
+                    }
                     this.setDirtyCanvas(true, true);
                 }, 1500);
                 return;
@@ -178,9 +200,17 @@
             super();
             this.title = "值监视器";
             this.addInput("value", "");
+            // 事件输入：接收上游完成事件，触发显示刷新（参照官方 ACTION 输入模式）
+            this.addInput("onTrigger", LiteGraph.ACTION);
             this.value = null;
         }
         onExecute() {
+            this.value = this.getInputData(0);
+            setNodeHighlight(this, 'executed');
+            this.setDirtyCanvas(true, true);
+        }
+        // 收到上游事件时读取数据值并刷新显示（事件驱动的执行时机）
+        onAction() {
             this.value = this.getInputData(0);
             setNodeHighlight(this, 'executed');
             this.setDirtyCanvas(true, true);
@@ -257,13 +287,15 @@
         if (graph.startNode) {
             graph.startNode.onExecute();
         }
+        // 执行一次拓扑，让常量节点提供数据并完成计算
+        graph.runStep(1, false);
         graph.setDirtyCanvas(true, true);
         outputDiv.innerHTML = "执行开始完成";
     }
 
     function forceRunStep() {
         // 强制重新执行所有节点
-        graph.runStep(0.1, false, true);
+        graph.runStep(1, false);
         graph.setDirtyCanvas(true, true);
         outputDiv.innerHTML = "强制重新执行完成";
     }

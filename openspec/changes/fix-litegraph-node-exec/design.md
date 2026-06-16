@@ -33,11 +33,21 @@
 **对齐内容**：
 - 所有节点 `mode: 0`（Always，正常执行）
 - 常量节点：仅 1 个 `value` 输出（type: number）
-- 数学节点：2 个输入（A/B，type: number）+ 1 个 `result` 输出
+- 数学节点：2 个数据输入（A/B，type: number）+ 1 个 `onTrigger` 事件输入（type: `__EVENT__`）+ 1 个 `result` 输出
 - 监视器节点：1 个 `value` 输入
-- 开始节点：1 个 `start` 输出（type: `__EVENT__`），独立存在不连数据线（c-2 方案下事件链路已移除，仅演示 triggerSlot 功能）
-- 拓扑：常量1.value → 数学.A，常量2.value → 数学.B，数学.result → 监视器.value；开始节点独立
+- 开始节点：1 个 `start` 输出（type: `__EVENT__`），通过事件连接到数学节点的 `onTrigger`
+- 拓扑：常量1.value → 数学.A，常量2.value → 数学.B，数学.result → 监视器.value，开始节点.start → 数学.onTrigger
 **备选**：修改节点代码增加 slots 适配 JSON —— 被否决，会增加不必要的复杂度。
+
+**修订（build 阶段，2026-06-16）**：验证发现「开始执行」按钮因开始节点事件未连接而无效。经用户确认选择「恢复事件连接」：数学节点保留 `onTrigger` 事件输入 slot，开始节点 `start` 输出通过事件连接到数学节点 `onTrigger`；`runStep()` 按钮在触发开始节点事件后追加一次拓扑执行，MathNode 延迟完成回调中自动执行一次拓扑让下游拿到延迟结果（同时修复「强制重新执行」task 4.1）。此修订使「开始执行」能真正驱动计算，对 c-2 多帧轮询方案无影响。
+
+**二次修订（build 阶段事件流重构，2026-06-16）**：验证发现两个问题：(1) `runStep(num, do_not_catch_errors, limit)` 第三参数 `true` 被当成 `limit=1`，导致只执行 start 节点，常量/数学从未执行；(2) 事件流断在 math（math 无事件输出），且延迟完成时 `runStep` 连带重新执行 start 导致 start→math 连线乱闪。经用户要求"按 LiteGraph 官方最佳实践重做事件流"，参照内置 `events/delay` 节点模式（`LiteGraph.ACTION` 输入 + `onAction` 接收 + `LiteGraph.EVENT` 输出 + `triggerSlot` 传播）：
+- StartNode `mode` 设为 `ON_TRIGGER`（3），拓扑循环 `runStep` 不再反复执行 start，消除延迟完成时 start→math 连线乱闪
+- MathNode 新增 `out` 事件输出（slot index 1），`onTrigger` 改为标准 `onAction`；setTimeout 回调计算完成后 `triggerSlot(1)` 把事件传播给下游，让 math→watch 连线产生流动高亮动画
+- WatchNode 新增 `onTrigger`（`LiteGraph.ACTION`）事件输入 + `onAction` 方法，事件驱动刷新显示
+- JSON 新增 link5（math.out → watch.onTrigger，EVENT），start `mode` 改为 3，math/watch 增加对应 slot
+- 效果：点击「开始执行」→ start→math 连线闪 → 1.5s 后 math→watch 连线闪，动画从开始逐级流转到输出
+- 同时修复 MathNode 缓存变化检测未包含 `operation` 的 bug（切换 add/mul 时不重算），新增 `_lastOperation` 字段纳入检测键
 
 ### Decision 2: 修复 `runStep()` 的 `graph.startNode` 解析
 **选择**：将 `graph.startNode` 统一解析为单个节点引用（而非数组），并在无开始节点时安全降级（仅刷新画布，不报错）。

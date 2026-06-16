@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: 默认图数据与节点定义一致
-系统加载的默认图 JSON 数据（`json/index_1.js`）SHALL 与 `index_1.html` 中代码注册的 4 种节点（开始/常量/数学/监视器）的 slot 定义严格一致，不得包含代码中未定义的 slot（如 `onTrigger` 输入、`onExecuted` 输出），且所有节点 `mode` MUST 为 `0`（正常执行）。
+系统加载的默认图 JSON 数据（`json/index_1.js`）SHALL 与 `index_1.html` 中代码注册的 4 种节点（开始/常量/数学/监视器）的 slot 定义严格一致，不得包含代码中未定义的 slot（如 `onExecuted` 输出）。常量/数学/监视器节点 `mode` MUST 为 `0`（正常执行）；开始节点 `mode` MUST 为 `3`（ON_TRIGGER，由「开始执行」按钮显式触发，不参与自动拓扑循环）。数学节点的 `onTrigger` 事件输入、`out` 事件输出与开始节点的 `start` 事件输出均为代码已定义的 slot。
 
 #### Scenario: 默认图加载后无悬空 slot
 - **WHEN** 页面加载并执行 `loadGraph()` 从 `Index_1_JsonData` 加载默认图
@@ -12,7 +12,7 @@
 - **THEN** 常量节点、数学节点、监视器节点的 `mode` 均为 `0`，不会被 LiteGraph 跳过执行
 
 ### Requirement: 默认图拓扑为常量加法到监视器
-默认图 SHALL 包含 2 个常量节点（值均为 `1`）、1 个数学运算节点（operation 为 `add`）、1 个监视器节点，且连接拓扑为：常量1.value → 数学.A、常量2.value → 数学.B、数学.result → 监视器.value。
+默认图 SHALL 包含 2 个常量节点（值均为 `1`）、1 个数学运算节点（operation 为 `add`）、1 个监视器节点、1 个开始节点，且连接拓扑为：常量1.value → 数学.A、常量2.value → 数学.B、数学.result → 监视器.value、开始节点.start → 数学.onTrigger、数学.out → 监视器.onTrigger（后两条为事件连接，驱动延迟后的结果传播与连线动画）。
 
 #### Scenario: 默认图拓扑正确
 - **WHEN** 默认图加载完成
@@ -30,11 +30,15 @@
 - **THEN** 节点按执行顺序依次呈现「执行中」和「已执行」的高亮状态（具体视觉延迟由 design 阶段确定）
 
 ### Requirement: 事件触发执行能完成计算
-当用户点击「开始执行」按钮时，系统 SHALL 从开始节点（若图中存在）触发事件链路完成计算；若图中不存在开始节点，系统 MUST 不报错并安全降级（仅刷新画布）。
+当用户点击「开始执行」按钮时，系统 SHALL 从开始节点（若图中存在）触发事件链路完成计算；若图中不存在开始节点，系统 MUST 不报错并安全降级（仅刷新画布）。事件链路 SHALL 按 LiteGraph 官方最佳实践完整流转：开始节点 EVENT 输出 → 数学节点 ACTION 输入（onAction）→ 数学节点延迟计算完成 → 数学节点 EVENT 输出（out）→ 监视器 ACTION 输入（onAction），使事件连线动画从开始节点逐级流转到监视器节点。开始节点 `mode` MUST 为 `ON_TRIGGER`（3），避免拓扑循环反复触发开始节点导致连线异常闪烁。
 
 #### Scenario: 存在开始节点时事件触发执行
 - **WHEN** 默认图加载完成且图中存在开始节点，用户点击「开始执行」按钮
 - **THEN** 从开始节点触发执行链路，最终监视器节点显示计算结果
+
+#### Scenario: 事件连线动画逐级流转
+- **WHEN** 用户点击「开始执行」按钮
+- **THEN** start→math 事件连线先产生流动高亮，数学节点延迟计算完成后 math→watch 事件连线产生流动高亮，且延迟完成时 start→math 连线不再异常闪烁
 
 #### Scenario: 不存在开始节点时不报错
 - **WHEN** 默认图中不包含开始节点，用户点击「开始执行」按钮
