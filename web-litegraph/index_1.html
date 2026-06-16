@@ -94,6 +94,7 @@
         }
         onExecute() {
             this.triggerSlot(0);
+            setNodeHighlight(this, 'executed');
         }
     }
 
@@ -106,6 +107,7 @@
         }
         onExecute() {
             this.setOutputData(0, this.properties.value);
+            setNodeHighlight(this, 'executed');
         }
     }
 
@@ -117,20 +119,57 @@
             this.addInput("B", "number");
             this.addOutput("result", "number");
             this.properties = { operation: "add" };
+            // 延迟计算状态机：保留 setTimeout 视觉延迟，但不破坏同步拓扑执行
+            this._lastInputs = [null, null];
+            this._pendingTimer = null;
+            this._computing = false;
+            this._cachedResult = null;
         }
-        async onExecute() {
-            const A = this.getInputData(0);
-            const B = this.getInputData(1);
-            if (A == null || B == null) return;
-            let result = 0;
-            await new Promise(resolve => setTimeout(resolve, 1500));
-            switch(this.properties.operation) {
-                case "add": result = A + B; break;
-                case "sub": result = A - B; break;
-                case "mul": result = A * B; break;
-                case "div": result = A / B; break;
+        onExecute() {
+            const inputA = this.getInputData(0);
+            const inputB = this.getInputData(1);
+
+            // 输入未就绪时输出空，不启动计算
+            if (inputA == null || inputB == null) {
+                this.setOutputData(0, null);
+                return;
             }
-            this.setOutputData(0, result);
+
+            // 输入变化（或首次执行）→ 启动延迟计算
+            if (this._lastInputs[0] !== inputA || this._lastInputs[1] !== inputB) {
+                this._lastInputs = [inputA, inputB];
+                this._computing = true;
+                setNodeHighlight(this, 'executing');
+                this.setOutputData(0, null);
+
+                clearTimeout(this._pendingTimer);
+                this._pendingTimer = setTimeout(() => {
+                    this._cachedResult = this._compute(inputA, inputB);
+                    this._computing = false;
+                    this.setOutputData(0, this._cachedResult);
+                    setNodeHighlight(this, 'executed');
+                    this.setDirtyCanvas(true, true);
+                }, 1500);
+                return;
+            }
+
+            // 计算中保持空
+            if (this._computing) {
+                this.setOutputData(0, null);
+                return;
+            }
+
+            // 已完成则保持结果
+            this.setOutputData(0, this._cachedResult);
+        }
+        _compute(inputA, inputB) {
+            switch (this.properties.operation) {
+                case "add": return inputA + inputB;
+                case "sub": return inputA - inputB;
+                case "mul": return inputA * inputB;
+                case "div": return inputA / inputB;
+                default: return 0;
+            }
         }
     }
 
@@ -143,17 +182,19 @@
         }
         onExecute() {
             this.value = this.getInputData(0);
-            console.log("值监视器：", this.value);
+            setNodeHighlight(this, 'executed');
             this.setDirtyCanvas(true, true);
         }
         onDrawBackground(ctx) {
             ctx.fillStyle = "#FFF";
             ctx.font = "12px Arial";
 
-            // 显示监控的值
-            const displayValue = typeof this.value === 'object'
-                ? JSON.stringify(this.value)
-                : String(this.value);
+            // value 为 null 时显示空，否则显示值
+            const displayValue = this.value == null
+                ? ""
+                : (typeof this.value === 'object'
+                    ? JSON.stringify(this.value)
+                    : String(this.value));
 
             ctx.fillText(`value: ${displayValue}`, 10, 30);
         }
@@ -186,8 +227,7 @@
         const data = jsonData ? JSON.parse(jsonData) : JSON.parse(Index_1_JsonData);
         if (data) {
             graph.configure(data);
-            graph.startNode = graph._nodes.filter(node => node.title === '开始节点');
-            CustomLiteGraphHighlightPlugin(graph)
+            graph.startNode = graph._nodes.find(node => node.type === 'basic/start') || null;
             outputDiv.innerHTML = "图形已加载";
         } else {
             outputDiv.innerHTML = "没有找到保存的图形";
@@ -214,8 +254,8 @@
     }
 
     function runStep() {
-        if (graph.startNode && graph.startNode[0]) {
-            graph.startNode[0].onExecute();
+        if (graph.startNode) {
+            graph.startNode.onExecute();
         }
         graph.setDirtyCanvas(true, true);
         outputDiv.innerHTML = "执行开始完成";
