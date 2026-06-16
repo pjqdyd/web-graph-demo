@@ -1,0 +1,14 @@
+{
+  "change": "fix-litegraph-node-exec",
+  "phase": "design",
+  "mode": "compact",
+  "canonical_spec": "openspec",
+  "generated_by": "comet-handoff.sh",
+  "context_hash": "6b3cc22effc73968bd801dfd662750d188ffac2ec298ffad1f8d1b0bb9d008f4",
+  "files": [
+    { "path": "openspec/changes/fix-litegraph-node-exec/proposal.md", "sha256": "f1d8b3950450e3f394357eb1244e56925e573caf487a567ebfbe6e61565194eb" },
+    { "path": "openspec/changes/fix-litegraph-node-exec/design.md", "sha256": "69d7022bec858118610db44e120336a58ee58c488e43af30f967d57377aa35ce" },
+    { "path": "openspec/changes/fix-litegraph-node-exec/tasks.md", "sha256": "2d6180b78dd23e43b0c90ab0a74a9a9ae003b78092a24df0c0faa512e0dd6dcc" },
+    { "path": "openspec/changes/fix-litegraph-node-exec/specs/litegraph-node-execution/spec.md", "sha256": "c66fa625738fc4181f1250b33fcd4a75a108d94729fd55be04838f6b2e42a519" }
+  ]
+}
