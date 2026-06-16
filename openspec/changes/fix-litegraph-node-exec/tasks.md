@@ -1,21 +1,21 @@
 ## 1. 默认图数据修复
 
-- [ ] 1.1 重新生成 `web-litegraph/json/index_1.js`，使所有节点 `mode` 为 `0`，去掉 `onTrigger` 输入与 `onExecuted` 输出等多余 slots
-- [ ] 1.2 确保默认图拓扑为：常量1.value → 数学.A、常量2.value → 数学.B、数学.result → 监视器.value（两个常量值均为 1，数学 operation 为 add）
+- [x] 1.1 重新生成 `web-litegraph/json/index_1.js`，使所有节点 `mode` 为 `0`，去掉 `onTrigger` 输入与 `onExecuted` 输出等多余 slots
+- [x] 1.2 确保默认图拓扑为：常量1.value → 数学.A、常量2.value → 数学.B、数学.result → 监视器.value（两个常量值均为 1，数学 operation 为 add）
 - [ ] 1.3 验证默认图加载后无悬空 slot、无控制台 slot 警告
 
 ## 2. 节点执行与控制函数修复
 
-- [ ] 2.1 修复 `runStep()` 对 `graph.startNode` 的解析，统一为单节点引用，无开始节点时安全降级不报错
+- [x] 2.1 修复 `runStep()` 对 `graph.startNode` 的解析，统一为单节点引用，无开始节点时安全降级不报错
 - [ ] 2.2 确认「启动图形」按钮触发的自动拓扑执行能让数据从常量流经数学到达监视器并显示 `2`
 - [ ] 2.3 确认「开始执行」按钮在存在开始节点时能触发事件链路完成计算
 
 ## 3. 延迟高亮与拓扑顺序冲突解决（方案待 `/comet-design` brainstorming 确定）
 
-- [ ] 3.1 在 `/comet-design` brainstorming 中确定 async onExecute + setTimeout 延迟与同步拓扑执行冲突的具体解决方案（候选：节点缓存上轮结果 / action 事件驱动 / 自定义异步队列）
-- [ ] 3.2 在 `/comet-design` brainstorming 中确定 highlight 插件覆盖运行时新增节点的具体机制（候选：改 addNode / onNodeAdded 回调）
-- [ ] 3.3 按确定方案实现：保留延迟高亮视觉效果，但下游节点能拿到上游最终正确结果
-- [ ] 3.4 按确定方案实现：运行时新增节点能正常执行且被高亮插件覆盖
+- [x] 3.1 在 `/comet-design` brainstorming 中确定 async onExecute + setTimeout 延迟与同步拓扑执行冲突的具体解决方案（候选：节点缓存上轮结果 / action 事件驱动 / 自定义异步队列）
+- [x] 3.2 在 `/comet-design` brainstorming 中确定 highlight 插件覆盖运行时新增节点的具体机制（候选：改 addNode / onNodeAdded 回调）
+- [x] 3.3 按确定方案实现：保留延迟高亮视觉效果，但下游节点能拿到上游最终正确结果
+- [x] 3.4 按确定方案实现：运行时新增节点能正常执行且被高亮插件覆盖
 
 ## 4. 强制重新执行验证
 
