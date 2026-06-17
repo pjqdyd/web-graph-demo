@@ -148,9 +148,11 @@
             }
 
             // 输入或运算符变化（或首次执行）→ 启动延迟计算
-            if (this._lastInputs[0] !== inputA
+            if (
+                this._lastInputs[0] !== inputA
                 || this._lastInputs[1] !== inputB
-                || this._lastOperation !== this.properties.operation) {
+                || this._lastOperation !== this.properties.operation
+            ) {
                 this._lastInputs = [inputA, inputB];
                 this._lastOperation = this.properties.operation;
                 this._computing = true;
@@ -204,13 +206,12 @@
             this.addInput("onTrigger", LiteGraph.ACTION);
             this.value = null;
         }
-        onExecute() {
-            this.value = this.getInputData(0);
-            setNodeHighlight(this, 'executed');
-            this.setDirtyCanvas(true, true);
-        }
-        // 收到上游事件时读取数据值并刷新显示（事件驱动的执行时机）
+        // 收到上游事件时执行
         onAction() {
+            this.onExecute();
+        }
+        onExecute() {
+            // 读取数据值并刷新显示
             this.value = this.getInputData(0);
             setNodeHighlight(this, 'executed');
             this.setDirtyCanvas(true, true);
