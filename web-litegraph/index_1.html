@@ -107,6 +107,7 @@
             this.title = "常量";
             this.addOutput("value", "number");
             this.properties = { value: 1.0 };
+            this.addWidget("number", "value", this.properties.value, (v) => { this.properties.value = v; });
         }
         onExecute() {
             this.setOutputData(0, this.properties.value);
@@ -125,6 +126,7 @@
             // 事件输出：延迟计算完成后通过此 slot 传播事件给下游（参照官方 events/delay）
             this.addOutput("out", LiteGraph.EVENT);
             this.properties = { operation: "add" };
+            this.addWidget("combo", "operation", this.properties.operation, (v) => { this.properties.operation = v; }, { values: ["add", "sub", "mul", "div"] });
             // 延迟计算状态机：保留 setTimeout 视觉延迟，但不破坏同步拓扑执行
             this._lastInputs = [null, null];
             // 记录上次运算符，运算符变化也需重新计算
@@ -227,7 +229,7 @@
                     ? JSON.stringify(this.value)
                     : String(this.value));
 
-            ctx.fillText(`value: ${displayValue}`, 10, 30);
+            ctx.fillText(`value: ${displayValue}`, 10, 60);
         }
     }
 
