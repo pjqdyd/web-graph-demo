@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>AC车道级导航 Three.js Demo</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #d4d6da;
+            font-family: sans-serif;
+        }
+        #container {
+            width: 100vw;
+            height: 100vh;
+        }
+        #hud {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: #ffffff;
+            background: rgba(10, 25, 50, 0.8);
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #1e4f8a;
+            pointer-events: none;
+            z-index: 10;
+        }
+        .speed { font-size: 24px; font-weight: bold; color: #00ffcc; }
+
+        #control {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            color: #ffffff;
+            background: rgba(10, 25, 50, 0.88);
+            padding: 18px 20px;
+            border-radius: 10px;
+            border: 1px solid #1e4f8a;
+            width: 250px;
+            font-size: 13px;
+            line-height: 1.8;
+            z-index: 10;
+        }
+        #control h3 {
+            margin: 0 0 12px 0;
+            font-size: 15px;
+            color: #00ffcc;
+            border-bottom: 1px solid #1e4f8a;
+            padding-bottom: 8px;
+        }
+        #control label {
+            display: block;
+            margin-bottom: 4px;
+            color: #b0c4de;
+        }
+        #control input[type="range"] {
+            width: 100%;
+            vertical-align: middle;
+            accent-color: #00ffcc;
+        }
+        #control .row { margin-bottom: 14px; }
+        #control .val {
+            color: #00ffcc;
+            font-weight: bold;
+            float: right;
+        }
+        #control select {
+            width: 100%;
+            background: #0a1a2e;
+            color: #fff;
+            border: 1px solid #1e4f8a;
+            border-radius: 4px;
+            padding: 4px 6px;
+            font-size: 13px;
+        }
+    </style>
+    <script src="https://cdn.bootcdn.net/ajax/libs/three.js/r128/three.js"></script>
+</head>
+<body>
+
+<div id="hud">
+    <div>当前时速: <span id="speedText" class="speed">0</span> KM/H</div>
+    <div style="margin-top: 5px;">当前车道: <span id="laneText" style="color:#00ff00; font-weight:bold;">中车道</span></div>
+</div>
+
+<div id="control">
+    <h3>仿真控制面板</h3>
+    <div class="row">
+        <label>车速模式
+            <select id="speedMode">
+                <option value="auto">自动变速</option>
+                <option value="manual">手动定速</option>
+            </select>
+        </label>
+    </div>
+    <div class="row" id="manualSpeedRow" style="display:none;">
+        <label>定速速度 <span class="val" id="speedVal">60</span> KM/H
+            <input type="range" id="speedSlider" min="20" max="150" value="60" step="5">
+        </label>
+    </div>
+    <div class="row">
+        <label>变道模式
+            <select id="laneMode">
+                <option value="auto">自动随机变道</option>
+                <option value="manual">手动锁定车道</option>
+            </select>
+        </label>
+    </div>
+    <div class="row" id="laneFreqRow">
+        <label>变道频率 <span class="val" id="freqVal">中</span>
+            <input type="range" id="laneFreqSlider" min="1" max="5" value="3" step="1">
+        </label>
+    </div>
+    <div class="row" id="manualLaneRow" style="display:none;">
+        <label>锁定车道
+            <select id="manualLane">
+                <option value="0">左车道</option>
+                <option value="1" selected>中车道</option>
+                <option value="2">右车道</option>
+            </select>
+        </label>
+    </div>
+    <div class="row">
+        <label>视角高度 <span class="val" id="camVal">中</span>
+            <input type="range" id="camSlider" min="1" max="5" value="3" step="1">
+        </label>
+    </div>
+</div>
+
+<div id="container"></div>
+
+<script>
+    // ==========================================
+    // 1. 赛道数据：大幅弯道
+    // ==========================================
+    const mockTrackWaypoints = [];
+    for (let i = 0; i < 300; i++) {
+        let x = Math.sin(i * 0.045) * 75 + Math.sin(i * 0.11) * 30 + i * 0.6;
+        let z = i * 15;
+        mockTrackWaypoints.push(new THREE.Vector2(x, z));
+    }
+
+    // 累积弧长
+    const cumLengths = [0];
+    for (let i = 1; i < mockTrackWaypoints.length; i++) {
+        cumLengths.push(cumLengths[i - 1] + mockTrackWaypoints[i].distanceTo(mockTrackWaypoints[i - 1]));
+    }
+    const trackTotalLength = cumLengths[cumLengths.length - 1];
+
+    function sampleTrackAt(d) {
+        if (d <= 0) d = 0;
+        if (d >= trackTotalLength) d = trackTotalLength - 0.001;
+        let i = 0;
+        while (i < cumLengths.length - 1 && cumLengths[i + 1] < d) i++;
+        const segLen = cumLengths[i + 1] - cumLengths[i] || 1;
+        const t = (d - cumLengths[i]) / segLen;
+        const p1 = mockTrackWaypoints[i];
+        const p2 = mockTrackWaypoints[i + 1];
+        const point = new THREE.Vector2().lerpVectors(p1, p2, t);
+        const tangent = new THREE.Vector2().subVectors(p2, p1).normalize();
+        return { point, tangent };
+    }
+
+    // ==========================================
+    // 2. Three.js 环境
+    // ==========================================
+    const container = document.getElementById('container');
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xd4d6da);
+    scene.fog = new THREE.FogExp2(0xd4d6da, 0.003);
+
+    const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.5, 3000);
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    container.appendChild(renderer.domElement);
+
+    // 灯光（日间）
+    scene.add(new THREE.AmbientLight(0xffffff, 1.0));
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.6);
+    dirLight.position.set(60, 120, 40);
+    scene.add(dirLight);
+
+    // ==========================================
+    // 3. 地图：柏油路面 + 车道线
+    // ==========================================
+    const LANE_WIDTH = 6.0;
+    const totalLanes = 3;
+    const ROAD_WIDTH = totalLanes * LANE_WIDTH + 2.5; // 20.5m
+    const trackGroup = new THREE.Group();
+    scene.add(trackGroup);
+
+    // 实线带状几何
+    function buildRibbon(centerOffset, width) {
+        const verts = [];
+        const samples = mockTrackWaypoints.length;
+        for (let i = 0; i < samples; i++) {
+            const { point, tangent } = sampleTrackAt(cumLengths[i]);
+            const normal = new THREE.Vector2(-tangent.y, tangent.x);
+            const left = new THREE.Vector2().addVectors(point, normal.clone().multiplyScalar(centerOffset + width / 2));
+            const right = new THREE.Vector2().addVectors(point, normal.clone().multiplyScalar(centerOffset - width / 2));
+            verts.push(left.x, 0, left.y, right.x, 0, right.y);
+        }
+        const idx = [];
+        for (let i = 0; i < samples - 1; i++) {
+            const a = i * 2, b = i * 2 + 1, c = (i + 1) * 2, d = (i + 1) * 2 + 1;
+            idx.push(a, b, c, b, d, c);
+        }
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+        geo.setIndex(idx);
+        geo.computeVertexNormals();
+        return geo;
+    }
+
+    // 虚线带状几何
+    function buildDashedRibbon(centerOffset, width, dashLen, gapLen) {
+        const group = new THREE.Group();
+        const period = dashLen + gapLen;
+        const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
+        for (let d = 0; d + dashLen < trackTotalLength; d += period) {
+            const sub = Math.max(2, Math.ceil(dashLen / 4));
+            const verts = [];
+            const idx = [];
+            for (let s = 0; s <= sub; s++) {
+                const { point, tangent } = sampleTrackAt(d + dashLen * s / sub);
+                const normal = new THREE.Vector2(-tangent.y, tangent.x);
+                const left = new THREE.Vector2().addVectors(point, normal.clone().multiplyScalar(centerOffset + width / 2));
+                const right = new THREE.Vector2().addVectors(point, normal.clone().multiplyScalar(centerOffset - width / 2));
+                verts.push(left.x, 0, left.y, right.x, 0, right.y);
+            }
+            for (let s = 0; s < sub; s++) {
+                const a = s * 2, b = s * 2 + 1, c = (s + 1) * 2, dd = (s + 1) * 2 + 1;
+                idx.push(a, b, c, b, dd, c);
+            }
+            const geo = new THREE.BufferGeometry();
+            geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+            geo.setIndex(idx);
+            geo.computeVertexNormals();
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.position.y = 0.15;
+            group.add(mesh);
+        }
+        return group;
+    }
+
+    // --- 路基底色（比路面稍宽的浅色边带，模拟路肩） ---
+    const shoulderMat = new THREE.MeshBasicMaterial({ color: 0xc8ccd0, side: THREE.DoubleSide });
+    const shoulderMesh = new THREE.Mesh(buildRibbon(0, ROAD_WIDTH + 4), shoulderMat);
+    shoulderMesh.position.y = -0.1;
+    trackGroup.add(shoulderMesh);
+
+    // --- 柏油路面（纯黑色，DoubleSide 确保从上方一定能看到） ---
+    const roadMat = new THREE.MeshBasicMaterial({ color: 0x1c1c1e, side: THREE.DoubleSide });
+    const roadMesh = new THREE.Mesh(buildRibbon(0, ROAD_WIDTH), roadMat);
+    roadMesh.position.y = 0;
+    trackGroup.add(roadMesh);
+
+    // --- 路缘边线（黄色实线，宽 0.8m） ---
+    const edgeMat = new THREE.MeshBasicMaterial({ color: 0xf5a623, side: THREE.DoubleSide });
+    const leftEdge = new THREE.Mesh(buildRibbon(-ROAD_WIDTH / 2 + 0.4, 0.8), edgeMat);
+    leftEdge.position.y = 0.15;
+    trackGroup.add(leftEdge);
+    const rightEdge = new THREE.Mesh(buildRibbon(ROAD_WIDTH / 2 - 0.4, 0.8), edgeMat);
+    rightEdge.position.y = 0.15;
+    trackGroup.add(rightEdge);
+
+    // --- 车道分隔虚线（纯白色，宽 1.2m，DoubleSide） ---
+    trackGroup.add(buildDashedRibbon(-LANE_WIDTH / 2, 1.2, 8, 7));
+    trackGroup.add(buildDashedRibbon(LANE_WIDTH / 2, 1.2, 8, 7));
+
+    // ==========================================
+    // 4. 车道高亮绿带（跟随车辆）
+    // ==========================================
+    const hlGeo = new THREE.PlaneGeometry(LANE_WIDTH, 50);
+    hlGeo.rotateX(-Math.PI / 2);
+    const hlMat = new THREE.MeshBasicMaterial({ color: 0x00ff66, transparent: true, opacity: 0.25, side: THREE.DoubleSide });
+    const laneHighlight = new THREE.Mesh(hlGeo, hlMat);
+    laneHighlight.position.set(0, 0.08, -20);
+
+    // ==========================================
+    // 5. 车辆模型
+    // ==========================================
+    const carGroup = new THREE.Group();
+    scene.add(carGroup);
+
+    const bodyMat = new THREE.MeshLambertMaterial({ color: 0xe53935 }); // 红色车身，深色路面上更醒目
+    const carBody = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.75, 4.6), bodyMat);
+    carBody.position.y = 0.7;
+    carGroup.add(carBody);
+
+    const cabinMat = new THREE.MeshLambertMaterial({ color: 0xb71c1c });
+    const carCabin = new THREE.Mesh(new THREE.BoxGeometry(1.95, 0.7, 2.4), cabinMat);
+    carCabin.position.set(0, 1.4, 0.2);
+    carGroup.add(carCabin);
+
+    const glassMat = new THREE.MeshLambertMaterial({ color: 0x1a1a2e });
+    [[0, 1.4, -1.0], [0, 1.4, 1.4]].forEach(p => {
+        const g = new THREE.Mesh(new THREE.BoxGeometry(1.75, 0.55, 0.1), glassMat);
+        g.position.set(p[0], p[1], p[2]);
+        carGroup.add(g);
+    });
+    [-0.99, 0.99].forEach(x => {
+        const sg = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.45, 1.9), glassMat);
+        sg.position.set(x, 1.42, 0.2);
+        carGroup.add(sg);
+    });
+
+    const wheelMat = new THREE.MeshLambertMaterial({ color: 0x1a1a1a });
+    const wheelGeo = new THREE.CylinderGeometry(0.48, 0.48, 0.36, 18);
+    wheelGeo.rotateZ(Math.PI / 2);
+    [[1.15, 0.48, -1.55], [-1.15, 0.48, -1.55], [1.15, 0.48, 1.55], [-1.15, 0.48, 1.55]].forEach(p => {
+        const w = new THREE.Mesh(wheelGeo, wheelMat);
+        w.position.set(p[0], p[1], p[2]);
+        carGroup.add(w);
+    });
+
+    const hlMat2 = new THREE.MeshBasicMaterial({ color: 0xfff59d });
+    [[0.7, 0.7, -2.3], [-0.7, 0.7, -2.3]].forEach(p => {
+        const l = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.22, 0.1), hlMat2);
+        l.position.set(p[0], p[1], p[2]);
+        carGroup.add(l);
+    });
+    const tlMat = new THREE.MeshBasicMaterial({ color: 0xff1744 });
+    [[0.7, 0.7, 2.3], [-0.7, 0.7, 2.3]].forEach(p => {
+        const l = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.22, 0.1), tlMat);
+        l.position.set(p[0], p[1], p[2]);
+        carGroup.add(l);
+    });
+
+    const ringGeo = new THREE.RingGeometry(2.4, 2.8, 32);
+    ringGeo.rotateX(-Math.PI / 2);
+    const ringMat = new THREE.MeshBasicMaterial({ color: 0x00ffcc, transparent: true, opacity: 0.4, side: THREE.DoubleSide });
+    const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+    ringMesh.position.y = 0.03;
+    carGroup.add(ringMesh);
+
+    carGroup.add(laneHighlight);
+
+    // ==========================================
+    // 6. 控制面板
+    // ==========================================
+    let speedMode = 'auto';
+    let manualSpeed = 60;
+    let laneMode = 'auto';
+    let laneFreq = 3;
+    let manualLane = 1;
+    let camLevel = 3;
+
+    document.getElementById('speedMode').addEventListener('change', e => {
+        speedMode = e.target.value;
+        document.getElementById('manualSpeedRow').style.display = speedMode === 'manual' ? 'block' : 'none';
+    });
+    document.getElementById('speedSlider').addEventListener('input', e => {
+        manualSpeed = parseFloat(e.target.value);
+        document.getElementById('speedVal').textContent = manualSpeed;
+    });
+    document.getElementById('laneMode').addEventListener('change', e => {
+        laneMode = e.target.value;
+        document.getElementById('laneFreqRow').style.display = laneMode === 'auto' ? 'block' : 'none';
+        document.getElementById('manualLaneRow').style.display = laneMode === 'manual' ? 'block' : 'none';
+    });
+    document.getElementById('laneFreqSlider').addEventListener('input', e => {
+        laneFreq = parseInt(e.target.value);
+        document.getElementById('freqVal').textContent = ['极低','低','中','高','极高'][laneFreq - 1];
+    });
+    document.getElementById('manualLane').addEventListener('change', e => {
+        manualLane = parseInt(e.target.value);
+    });
+    document.getElementById('camSlider').addEventListener('input', e => {
+        camLevel = parseInt(e.target.value);
+        document.getElementById('camVal').textContent = ['极低','低','中','高','极高'][camLevel - 1];
+    });
+
+    // ==========================================
+    // 7. 仿真动画
+    // ==========================================
+    let simDistance = 0;
+    let currentTargetLane = 1;
+    let laneTimer = 0;
+    let laneChangeInterval = 280;
+    let renderCarPos = new THREE.Vector3();
+    let renderCarHeading = 0;
+    let renderLaneOffset = 0;
+
+    function freqToInterval(freq) {
+        return ({1:700, 2:450, 3:280, 4:170, 5:90})[freq] + Math.floor(Math.random() * 60);
+    }
+
+    // 视角高度映射
+    function camParams(level) {
+        const presets = [
+            { h: 9,  dist: 10, look: 16 },  // 极低：贴近地面，换道效果最明显
+            { h: 13, dist: 13, look: 20 },  // 低
+            { h: 18, dist: 16, look: 25 },  // 中
+            { h: 26, dist: 22, look: 32 },  // 高
+            { h: 36, dist: 30, look: 40 },  // 极高
+        ];
+        return presets[level - 1] || presets[2];
+    }
+
+    function animate() {
+        requestAnimationFrame(animate);
+
+        // 速度
+        const now = Date.now();
+        let speedKmh;
+        if (speedMode === 'manual') {
+            speedKmh = manualSpeed;
+        } else {
+            speedKmh = 40 + (Math.sin(now * 0.00028) * 0.5 + 0.5) * 40 + Math.sin(now * 0.0015) * 5;
+            speedKmh = Math.max(25, speedKmh);
+        }
+        simDistance += (speedKmh / 3.6) * (1 / 60);
+
+        // 变道
+        if (laneMode === 'auto') {
+            laneTimer++;
+            if (laneTimer > laneChangeInterval) {
+                let newLane;
+                do { newLane = Math.floor(Math.random() * 3); } while (newLane === currentTargetLane);
+                currentTargetLane = newLane;
+                laneChangeInterval = freqToInterval(laneFreq);
+                laneTimer = 0;
+            }
+        } else {
+            currentTargetLane = manualLane;
+        }
+
+        // 采样赛道
+        const d = simDistance % trackTotalLength;
+        const { point, tangent } = sampleTrackAt(d);
+        const rawHeading = Math.atan2(tangent.x, tangent.y) + Math.PI;
+        const targetLaneOffset = (currentTargetLane - 1) * LANE_WIDTH;
+
+        // 平滑插值（换道速度适中，既不过快也不拖沓）
+        renderLaneOffset += (targetLaneOffset - renderLaneOffset) * 0.08;
+
+        const normal = new THREE.Vector2(-tangent.y, tangent.x);
+        const finalX = point.x + normal.x * renderLaneOffset;
+        const finalZ = point.y + normal.y * renderLaneOffset;
+
+        renderCarPos.x += (finalX - renderCarPos.x) * 0.15;
+        renderCarPos.z += (finalZ - renderCarPos.z) * 0.15;
+
+        let angleDiff = rawHeading - renderCarHeading;
+        angleDiff = Math.atan2(Math.sin(angleDiff), Math.cos(angleDiff));
+        renderCarHeading += angleDiff * 0.15;
+
+        // 渲染
+        carGroup.position.copy(renderCarPos);
+        carGroup.rotation.y = renderCarHeading;
+        trackGroup.position.set(0, 0, 0);
+        trackGroup.rotation.set(0, 0, 0);
+
+        // 相机跟随（高度可调）
+        const cp = camParams(camLevel);
+        const fwdX = tangent.x, fwdZ = tangent.y;
+        camera.position.set(
+            renderCarPos.x - fwdX * cp.dist,
+            cp.h,
+            renderCarPos.z - fwdZ * cp.dist
+        );
+        camera.lookAt(
+            renderCarPos.x + fwdX * cp.look,
+            1.5,
+            renderCarPos.z + fwdZ * cp.look
+        );
+
+        document.getElementById('speedText').innerText = Math.round(speedKmh);
+        document.getElementById('laneText').innerText = ['左车道', '中车道', '右车道'][currentTargetLane];
+
+        renderer.render(scene, camera);
+    }
+
+    animate();
+
+    window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+</script>
+</body>
+</html>
